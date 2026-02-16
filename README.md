@@ -4,8 +4,6 @@
 
 MCP server for AutoRABIT ARM APIs, covering all CI Jobs v1 endpoints.
 
-**Project status:** The badge above reflects the latest run of [CI](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml) on `main` (install, build, and type check). Green = passing, red = failing.
-
 ## Modeled APIs
 
 - `GET /api/cijobs/v1/listcijobs`
