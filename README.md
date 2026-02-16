@@ -99,6 +99,53 @@ npm start
 }
 ```
 
+## Docker
+
+### Build the image
+
+```bash
+docker build -t arm-mcp-server .
+```
+
+### Run interactively
+
+```bash
+docker run -i --rm \
+  -e ARM_BASE_URL=pilot.autorabit.com \
+  -e ARM_API_TOKEN=YOUR_TOKEN \
+  arm-mcp-server
+```
+
+### MCP client config (Docker)
+
+```json
+{
+  "mcpServers": {
+    "arm": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "ARM_BASE_URL",
+        "-e", "ARM_API_TOKEN",
+        "arm-mcp-server"
+      ],
+      "env": {
+        "ARM_BASE_URL": "pilot.autorabit.com",
+        "ARM_API_TOKEN": "YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+### docker-compose
+
+```bash
+cp .env.example .env
+# edit .env with your credentials
+docker compose run --rm arm-mcp-server
+```
+
 ## Tool payloads
 
 ### `arm_list_ci_jobs`

@@ -27,3 +27,12 @@ jobs:
 
       - name: Type check
         run: npx tsc --noEmit
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t arm-mcp-server .

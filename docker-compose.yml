@@ -1,0 +1,5 @@
+services:
+  arm-mcp-server:
+    build: .
+    stdin_open: true
+    env_file: .env
