@@ -176,7 +176,7 @@ function formatToolResult(result: unknown): { content: Array<{ type: "text"; tex
 const server = new Server(
   {
     name: "arm-mcp-server",
-    version: "0.2.0",
+    version: "0.3.0",
   },
   {
     capabilities: {
@@ -280,6 +280,242 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "arm_list_ci_jobs",
+        description:
+          "GET /api/cijobs/v1/listcijobs. Lists all CI jobs configured in ARM.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_ci_job_history",
+        description:
+          "GET /api/cijobs/v1/history/{ciJobName}. Retrieves CI job build history.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ciJobName: {
+              type: "string",
+              description: "Case-sensitive CI job name",
+            },
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            from: {
+              type: "number",
+              description: "Start index for history range. Defaults to -1 (all).",
+            },
+            to: {
+              type: "number",
+              description: "End index for history range. Defaults to -1 (all).",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["ciJobName", "projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_latest_results",
+        description:
+          "GET /api/cijobs/v1/latestresults/{ciJobName}. Retrieves detailed latest results for a CI job.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ciJobName: {
+              type: "string",
+              description: "Case-sensitive CI job name",
+            },
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["ciJobName", "projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_poll_job_status",
+        description:
+          "GET /api/cijobs/v1/pollstatus/{ciJobName}/{buildNumber?}. Polls the current status of a CI job build.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ciJobName: {
+              type: "string",
+              description: "Case-sensitive CI job name",
+            },
+            buildNumber: {
+              type: "number",
+              description: "Optional build number. If omitted, latest build is used.",
+            },
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["ciJobName", "projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_rollback_history",
+        description:
+          "GET /api/cijobs/v1/rollback/history/{ciJobName}/{buildNumber?}. Fetches rollback history for a CI job build.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ciJobName: {
+              type: "string",
+              description: "Case-sensitive CI job name",
+            },
+            buildNumber: {
+              type: "number",
+              description: "Optional build number. If omitted, latest build is used.",
+            },
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["ciJobName", "projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_rollback_details",
+        description:
+          "GET /api/cijobs/v1/rollback/{ciJobName}. Retrieves complete rollback information for a CI job.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ciJobName: {
+              type: "string",
+              description: "Case-sensitive CI job name",
+            },
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["ciJobName", "projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_trigger_build",
+        description:
+          "POST /api/cijobs/v1/trigger. Triggers a new build for a CI job.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            title: {
+              type: "string",
+              description: "CI job build label",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["projectName", "title"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_update_baseline_revision",
+        description:
+          "POST /api/cijobs/v1/update/baselinerevision. Updates the baseline revision for a CI job.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            projectName: {
+              type: "string",
+              description: "Case-sensitive CI job project name",
+            },
+            baseLineRevision: {
+              type: "string",
+              description: "Baseline revision number/hash for the CI job",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["projectName", "baseLineRevision"],
+          additionalProperties: false,
+        },
+      },
+      {
         name: "arm_call_api",
         description:
           "Generic ARM API request tool for additional endpoints not yet modeled as dedicated tools.",
@@ -379,6 +615,160 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return formatToolResult(result);
   }
 
+  if (toolName === "arm_list_ci_jobs") {
+    const result = await armRequest({
+      config,
+      path: "/api/cijobs/v1/listcijobs",
+      method: "GET",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_ci_job_history") {
+    const ciJobName = encodeURIComponent(getStringArg(args.ciJobName, "ciJobName")!);
+    const fromRaw = args.from;
+    const toRaw = args.to;
+    const query: JsonObject = {};
+    if (typeof fromRaw === "number" && Number.isFinite(fromRaw)) {
+      query.from = fromRaw;
+    } else {
+      query.from = -1;
+    }
+    if (typeof toRaw === "number" && Number.isFinite(toRaw)) {
+      query.to = toRaw;
+    } else {
+      query.to = -1;
+    }
+
+    const result = await armRequest({
+      config,
+      path: `/api/cijobs/v1/history/${ciJobName}`,
+      method: "GET",
+      query,
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_latest_results") {
+    const ciJobName = encodeURIComponent(getStringArg(args.ciJobName, "ciJobName")!);
+
+    const result = await armRequest({
+      config,
+      path: `/api/cijobs/v1/latestresults/${ciJobName}`,
+      method: "GET",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_poll_job_status") {
+    const ciJobName = encodeURIComponent(getStringArg(args.ciJobName, "ciJobName")!);
+    const buildNumberRaw = args.buildNumber;
+    const buildSegment =
+      typeof buildNumberRaw === "number" && Number.isFinite(buildNumberRaw)
+        ? `/${String(buildNumberRaw)}`
+        : "";
+
+    const result = await armRequest({
+      config,
+      path: `/api/cijobs/v1/pollstatus/${ciJobName}${buildSegment}`,
+      method: "GET",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_rollback_history") {
+    const ciJobName = encodeURIComponent(getStringArg(args.ciJobName, "ciJobName")!);
+    const buildNumberRaw = args.buildNumber;
+    const buildSegment =
+      typeof buildNumberRaw === "number" && Number.isFinite(buildNumberRaw)
+        ? `/${String(buildNumberRaw)}`
+        : "";
+
+    const result = await armRequest({
+      config,
+      path: `/api/cijobs/v1/rollback/history/${ciJobName}${buildSegment}`,
+      method: "GET",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_rollback_details") {
+    const ciJobName = encodeURIComponent(getStringArg(args.ciJobName, "ciJobName")!);
+
+    const result = await armRequest({
+      config,
+      path: `/api/cijobs/v1/rollback/${ciJobName}`,
+      method: "GET",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_trigger_build") {
+    const result = await armRequest({
+      config,
+      path: "/api/cijobs/v1/trigger",
+      method: "POST",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        title: getStringArg(args.title, "title"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_update_baseline_revision") {
+    const result = await armRequest({
+      config,
+      path: "/api/cijobs/v1/update/baselinerevision",
+      method: "POST",
+      body: {
+        projectName: getStringArg(args.projectName, "projectName"),
+        baseLineRevision: getStringArg(args.baseLineRevision, "baseLineRevision"),
+      },
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
   if (toolName === "arm_call_api") {
     const path = typeof args.path === "string" ? args.path : undefined;
     const method = typeof args.method === "string" ? args.method.toUpperCase() : undefined;
@@ -443,9 +833,17 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           text: JSON.stringify(
             {
               server: "arm-mcp-server",
-              version: "0.2.0",
+              version: "0.3.0",
               capabilities: ["tools", "resources", "prompts"],
               modeledApis: [
+                "GET /api/cijobs/v1/listcijobs",
+                "GET /api/cijobs/v1/history/{ciJobName}",
+                "GET /api/cijobs/v1/latestresults/{ciJobName}",
+                "GET /api/cijobs/v1/pollstatus/{ciJobName}/{buildNumber?}",
+                "GET /api/cijobs/v1/rollback/history/{ciJobName}/{buildNumber?}",
+                "GET /api/cijobs/v1/rollback/{ciJobName}",
+                "POST /api/cijobs/v1/trigger",
+                "POST /api/cijobs/v1/update/baselinerevision",
                 "POST /api/cijobs/v1/triggerquickdeploy/{ciJobName}/{buildNumber?}",
                 "POST /api/cijobs/v1/rollback",
                 "PUT /api/cijobs/v1/abort/{ciJobName}/{buildNumber?}",
@@ -474,6 +872,55 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           mimeType: "application/json",
           text: JSON.stringify(
             [
+              {
+                tool: "arm_list_ci_jobs",
+                method: "GET",
+                path: "/api/cijobs/v1/listcijobs",
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_ci_job_history",
+                method: "GET",
+                path: "/api/cijobs/v1/history/{ciJobName}",
+                query: ["from", "to"],
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_latest_results",
+                method: "GET",
+                path: "/api/cijobs/v1/latestresults/{ciJobName}",
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_poll_job_status",
+                method: "GET",
+                path: "/api/cijobs/v1/pollstatus/{ciJobName}/{buildNumber?}",
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_rollback_history",
+                method: "GET",
+                path: "/api/cijobs/v1/rollback/history/{ciJobName}/{buildNumber?}",
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_rollback_details",
+                method: "GET",
+                path: "/api/cijobs/v1/rollback/{ciJobName}",
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_trigger_build",
+                method: "POST",
+                path: "/api/cijobs/v1/trigger",
+                body: ["projectName", "title"],
+              },
+              {
+                tool: "arm_update_baseline_revision",
+                method: "POST",
+                path: "/api/cijobs/v1/update/baselinerevision",
+                body: ["projectName", "baseLineRevision"],
+              },
               {
                 tool: "arm_quick_deploy",
                 method: "POST",
@@ -575,6 +1022,48 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
           },
         ],
       },
+      {
+        name: "arm_trigger_build_guide",
+        description: "Guide the model to trigger a new CI build and monitor its progress",
+        arguments: [
+          {
+            name: "project_name",
+            required: true,
+            description: "Case-sensitive CI project name",
+          },
+          {
+            name: "title",
+            required: true,
+            description: "Build label",
+          },
+        ],
+      },
+      {
+        name: "arm_poll_status_guide",
+        description: "Guide the model to poll CI job status and interpret the results",
+        arguments: [
+          {
+            name: "ci_job_name",
+            required: true,
+            description: "Case-sensitive CI job name",
+          },
+          {
+            name: "project_name",
+            required: true,
+            description: "Case-sensitive CI project name",
+          },
+          {
+            name: "title",
+            required: true,
+            description: "Build label",
+          },
+          {
+            name: "build_number",
+            required: false,
+            description: "Optional build number to poll",
+          },
+        ],
+      },
     ],
   };
 });
@@ -635,6 +1124,68 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
               "- unknown",
               "",
               "Then provide next action recommendation.",
+            ].join("\n"),
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === "arm_trigger_build_guide") {
+    const projectName = typeof args.project_name === "string" ? args.project_name : "<project_name>";
+    const title = typeof args.title === "string" ? args.title : "<title>";
+
+    return {
+      description: "Trigger build and monitor execution flow",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              "Trigger a new CI build for this ARM CI job:",
+              `- project_name: ${projectName}`,
+              `- title: ${title}`,
+              "",
+              "Steps:",
+              "1. Call `arm_trigger_build` with the above payload",
+              "2. Note the returned build number (cyclenum)",
+              "3. Call `arm_poll_job_status` to monitor progress",
+              "4. Summarize: build number, current status, and whether rollback is validated",
+            ].join("\n"),
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === "arm_poll_status_guide") {
+    const ciJobName = typeof args.ci_job_name === "string" ? args.ci_job_name : "<ci_job_name>";
+    const projectName = typeof args.project_name === "string" ? args.project_name : "<project_name>";
+    const title = typeof args.title === "string" ? args.title : "<title>";
+    const buildNumber = typeof args.build_number === "string" ? args.build_number : "<optional_build_number>";
+
+    return {
+      description: "Poll job status and interpret results",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              "Poll the status of this ARM CI job build:",
+              `- ci_job_name: ${ciJobName}`,
+              `- project_name: ${projectName}`,
+              `- title: ${title}`,
+              `- build_number: ${buildNumber}`,
+              "",
+              "Call `arm_poll_job_status` and classify the result as:",
+              "- Completed successfully",
+              "- In progress",
+              "- Failed",
+              "",
+              "Report: build status, quick deploy status, rollback validation flag.",
+              "If in progress, suggest polling again after a short delay.",
             ].join("\n"),
           },
         },
