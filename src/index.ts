@@ -21,6 +21,13 @@ interface ArmConfig {
   maxRetries: number;
 }
 
+interface AuditConfig {
+  baseUrl: string;
+  bearerToken: string;
+  timeoutMs: number;
+  maxRetries: number;
+}
+
 function normalizeBaseUrl(raw: string): string {
   const trimmed = raw.trim().replace(/\/$/, "");
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
@@ -44,6 +51,28 @@ function getConfig(): ArmConfig {
   return {
     baseUrl: normalizeBaseUrl(baseUrl),
     apiToken,
+    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 30000,
+    maxRetries: Number.isFinite(maxRetries) ? maxRetries : 2,
+  };
+}
+
+function getAuditConfig(): AuditConfig {
+  const baseUrl = process.env.ARM_AUDIT_BASE_URL?.trim();
+  const bearerToken = process.env.ARM_AUDIT_API_TOKEN?.trim();
+  const timeoutMs = Number(process.env.ARM_AUDIT_TIMEOUT_MS ?? "30000");
+  const maxRetries = Number(process.env.ARM_AUDIT_MAX_RETRIES ?? "2");
+
+  if (!baseUrl) {
+    throw new McpError(ErrorCode.InvalidRequest, "Missing ARM_AUDIT_BASE_URL environment variable");
+  }
+
+  if (!bearerToken) {
+    throw new McpError(ErrorCode.InvalidRequest, "Missing ARM_AUDIT_API_TOKEN environment variable");
+  }
+
+  return {
+    baseUrl: normalizeBaseUrl(baseUrl),
+    bearerToken,
     timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 30000,
     maxRetries: Number.isFinite(maxRetries) ? maxRetries : 2,
   };
@@ -162,6 +191,83 @@ async function armRequest(args: {
   );
 }
 
+async function auditRequest(args: {
+  config: AuditConfig;
+  path: string;
+  method: HttpMethod;
+  query?: JsonObject;
+}): Promise<{ status: number; data: unknown; headers: Record<string, string> }> {
+  const { config, path, method, query } = args;
+  const url = buildUrl(config.baseUrl, path, query);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${config.bearerToken}`,
+  };
+
+  let attempt = 0;
+  let lastError: unknown;
+
+  while (attempt <= config.maxRetries) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      const data = await parseResponseBody(response);
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+
+      return {
+        status: response.status,
+        data,
+        headers: responseHeaders,
+      };
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error;
+      attempt += 1;
+
+      if (attempt > config.maxRetries) {
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, attempt * 300));
+    }
+  }
+
+  throw new McpError(
+    ErrorCode.InternalError,
+    `Audit request failed after ${config.maxRetries + 1} attempts: ${String(lastError)}`,
+  );
+}
+
+const AUDIT_EVENT_TYPES = [
+  { eventType: "LOGIN", module: "Admin", description: "Login via Username/Password (UWP), VSCode apiToken, ChannelSecure, or Modernization jwtToken" },
+  { eventType: "DEPLOYMENT", module: "CI Jobs, Deployment, Version Control", description: "CI Job Deployment, Quick Deployment, Rollback, Custom Deployment, Profile Manager, Org Synchronization, Commit/Merge Validation, Scratch Org creation" },
+  { eventType: "CIBUILD", module: "CI Jobs", description: "Trigger Build and Build History events" },
+  { eventType: "DATALOADER", module: "Single Dataloader", description: "Extract, Insert, Upsert, Update, Delete operations" },
+  { eventType: "FEATUREDEPLOYMENT", module: "nCino", description: "All events related to the Feature Deployment module" },
+  { eventType: "DATARETRIEVALMIGRATION", module: "nCino", description: "All Salesforce events involving data migration and retrieval" },
+  { eventType: "FEATURECREATION", module: "nCino", description: "Events related to Feature Creation" },
+  { eventType: "DATALOADERPRO", module: "Dataloader Pro", description: "Upsert, Data Masking, Applied Mapping, Filters" },
+  { eventType: "DATALOADERCONFIGURATION", module: "Dataloader", description: "All events related to Dataloader Configurations" },
+  { eventType: "TESTENVIRONMENTSETUP", module: "Dataloader", description: "Upsert and Applied Mappings" },
+  { eventType: "EZCOMMIT", module: "Version Control", description: "Prevalidate Commit and EZ-Commit" },
+  { eventType: "MERGE", module: "Version Control", description: "Dry Run, Prevalidate Merge, and Merge only" },
+] as const;
+
+const VALID_EVENT_TYPE_NAMES = AUDIT_EVENT_TYPES.map((e) => e.eventType);
+
 function formatToolResult(result: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
     content: [
@@ -176,7 +282,7 @@ function formatToolResult(result: unknown): { content: Array<{ type: "text"; tex
 const server = new Server(
   {
     name: "arm-mcp-server",
-    version: "0.3.0",
+    version: "0.4.0",
   },
   {
     capabilities: {
@@ -547,14 +653,142 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           additionalProperties: false,
         },
       },
+      {
+        name: "arm_audit_get_logs",
+        description:
+          "GET /logs/audit_logs. Retrieves SIEM audit logs from AutoRABIT with optional filters. Returns CEF-formatted log entries.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            startTime: {
+              type: "string",
+              description:
+                "Start time in ISO 8601 format (YYYY-MM-DDThh:mm:ss). Defaults to current day if omitted.",
+            },
+            maxResults: {
+              type: "number",
+              description: "Maximum number of results to return. Default is 1000.",
+            },
+            eventType: {
+              type: "string",
+              description:
+                "Comma-separated event types to filter. Valid values: LOGIN, DEPLOYMENT, CIBUILD, DATALOADER, FEATUREDEPLOYMENT, DATARETRIEVALMIGRATION, FEATURECREATION, DATALOADERPRO, DATALOADERCONFIGURATION, TESTENVIRONMENTSETUP, EZCOMMIT, MERGE. If omitted, all events are returned.",
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_audit_download_logs",
+        description:
+          "GET /logs/audit_logs/download. Downloads SIEM audit logs as a ZIP file for a date range (max 90 days). Returns the constructed download URL and request metadata.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            startTime: {
+              type: "string",
+              description: "Start date in ISO 8601 format (YYYY-MM-DDThh:mm:ss). Required.",
+            },
+            endTime: {
+              type: "string",
+              description:
+                "End date in ISO 8601 format (YYYY-MM-DDThh:mm:ss). Optional; defaults to current day. Range must be within 90 days of startTime.",
+            },
+          },
+          required: ["startTime"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_audit_list_event_types",
+        description:
+          "Returns the 12 known ARM SIEM audit event types with their associated modules and descriptions. No API call is made; this is a local reference.",
+        inputSchema: {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        },
+      },
     ],
   };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const config = getConfig();
   const toolName = request.params.name;
   const args = request.params.arguments ?? {};
+
+  // --- Audit log tools (separate config + Bearer auth) ---
+
+  if (toolName === "arm_audit_list_event_types") {
+    return formatToolResult(AUDIT_EVENT_TYPES);
+  }
+
+  if (toolName === "arm_audit_get_logs") {
+    const auditConfig = getAuditConfig();
+    const query: JsonObject = {};
+
+    const startTime = getStringArg(args.startTime, "startTime", false);
+    if (startTime) query.startTime = startTime;
+
+    const maxResultsRaw = args.maxResults;
+    if (typeof maxResultsRaw === "number" && Number.isFinite(maxResultsRaw)) {
+      query.maxResults = maxResultsRaw;
+    }
+
+    const eventTypeRaw = getStringArg(args.eventType, "eventType", false);
+    if (eventTypeRaw) {
+      const types = eventTypeRaw.split(",").map((t) => t.trim());
+      for (const t of types) {
+        if (!VALID_EVENT_TYPE_NAMES.includes(t as (typeof VALID_EVENT_TYPE_NAMES)[number])) {
+          throw new McpError(
+            ErrorCode.InvalidParams,
+            `Invalid eventType "${t}". Valid values: ${VALID_EVENT_TYPE_NAMES.join(", ")}`,
+          );
+        }
+      }
+      query.eventType = eventTypeRaw;
+    }
+
+    const result = await auditRequest({
+      config: auditConfig,
+      path: "/logs/audit_logs",
+      method: "GET",
+      query,
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_audit_download_logs") {
+    const auditConfig = getAuditConfig();
+    const startTime = getStringArg(args.startTime, "startTime")!;
+    const endTime = getStringArg(args.endTime, "endTime", false);
+
+    const query: JsonObject = { startTime };
+    if (endTime) query.endTime = endTime;
+
+    const downloadUrl = buildUrl(auditConfig.baseUrl, "/logs/audit_logs/download", query);
+
+    const result = await auditRequest({
+      config: auditConfig,
+      path: "/logs/audit_logs/download",
+      method: "GET",
+      query,
+    });
+
+    return formatToolResult({
+      downloadUrl,
+      startTime,
+      endTime: endTime ?? "(current day)",
+      note: "The API returns a ZIP file. If the response status is 200, the download was successful. Use the downloadUrl with a Bearer token to retrieve the file externally.",
+      status: result.status,
+      headers: result.headers,
+    });
+  }
+
+  // --- CI Jobs tools (ARM config + token header auth) ---
+
+  const config = getConfig();
 
   if (toolName === "arm_quick_deploy") {
     const ciJobName = encodeURIComponent(getStringArg(args.ciJobName, "ciJobName")!);
@@ -817,6 +1051,12 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
         description: "Required environment variables and request headers",
         mimeType: "text/markdown",
       },
+      {
+        uri: "arm://docs/audit-logs",
+        name: "ARM SIEM Audit Logs",
+        description: "Audit log retrieval APIs, event types, and CEF response format",
+        mimeType: "application/json",
+      },
     ],
   };
 });
@@ -833,23 +1073,30 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           text: JSON.stringify(
             {
               server: "arm-mcp-server",
-              version: "0.3.0",
+              version: "0.4.0",
               capabilities: ["tools", "resources", "prompts"],
-              modeledApis: [
-                "GET /api/cijobs/v1/listcijobs",
-                "GET /api/cijobs/v1/history/{ciJobName}",
-                "GET /api/cijobs/v1/latestresults/{ciJobName}",
-                "GET /api/cijobs/v1/pollstatus/{ciJobName}/{buildNumber?}",
-                "GET /api/cijobs/v1/rollback/history/{ciJobName}/{buildNumber?}",
-                "GET /api/cijobs/v1/rollback/{ciJobName}",
-                "POST /api/cijobs/v1/trigger",
-                "POST /api/cijobs/v1/update/baselinerevision",
-                "POST /api/cijobs/v1/triggerquickdeploy/{ciJobName}/{buildNumber?}",
-                "POST /api/cijobs/v1/rollback",
-                "PUT /api/cijobs/v1/abort/{ciJobName}/{buildNumber?}",
-              ],
+              modeledApis: {
+                ciJobs: [
+                  "GET /api/cijobs/v1/listcijobs",
+                  "GET /api/cijobs/v1/history/{ciJobName}",
+                  "GET /api/cijobs/v1/latestresults/{ciJobName}",
+                  "GET /api/cijobs/v1/pollstatus/{ciJobName}/{buildNumber?}",
+                  "GET /api/cijobs/v1/rollback/history/{ciJobName}/{buildNumber?}",
+                  "GET /api/cijobs/v1/rollback/{ciJobName}",
+                  "POST /api/cijobs/v1/trigger",
+                  "POST /api/cijobs/v1/update/baselinerevision",
+                  "POST /api/cijobs/v1/triggerquickdeploy/{ciJobName}/{buildNumber?}",
+                  "POST /api/cijobs/v1/rollback",
+                  "PUT /api/cijobs/v1/abort/{ciJobName}/{buildNumber?}",
+                ],
+                auditLogs: [
+                  "GET /logs/audit_logs",
+                  "GET /logs/audit_logs/download",
+                ],
+              },
               utilityFeatures: [
-                "token header auth",
+                "CI Jobs: token header auth (ARM_API_TOKEN)",
+                "Audit Logs: Bearer token auth (ARM_AUDIT_API_TOKEN)",
                 "Base URL normalization with implicit https",
                 "Timeout + retries",
                 "Structured JSON response wrapping",
@@ -957,6 +1204,8 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           text: [
             "# ARM Auth",
             "",
+            "## CI Jobs API",
+            "",
             "Set these environment variables before starting the MCP server:",
             "",
             "- `ARM_BASE_URL`: Your ARM org URL (for example `pilot.autorabit.com` or `https://pilot.autorabit.com`)",
@@ -968,7 +1217,58 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             "- `token: <ARM_API_TOKEN>`",
             "- `Accept: application/json`",
             "- `Content-Type: application/json` when body exists",
+            "",
+            "## SIEM Audit Logs API",
+            "",
+            "The audit logs API uses a **separate** base URL and Bearer token (not shared with CI Jobs):",
+            "",
+            "- `ARM_AUDIT_BASE_URL`: Audit logs domain (for example `auditlogs.autorabit.com`)",
+            "- `ARM_AUDIT_API_TOKEN`: Bearer token sent as `Authorization: Bearer <token>` header",
+            "- `ARM_AUDIT_TIMEOUT_MS` (optional): request timeout in milliseconds, default `30000`",
+            "- `ARM_AUDIT_MAX_RETRIES` (optional): retry count for network failures, default `2`",
+            "",
+            "Default headers sent:",
+            "- `Authorization: Bearer <ARM_AUDIT_API_TOKEN>`",
+            "- `Content-Type: application/json`",
           ].join("\n"),
+        },
+      ],
+    };
+  }
+
+  if (uri === "arm://docs/audit-logs") {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify(
+            {
+              description: "AutoRABIT SIEM Audit Logs Retrieval API",
+              baseUrl: "https://<prefix>auditlogs.autorabit.com",
+              auth: "Authorization: Bearer <ARM_AUDIT_API_TOKEN>",
+              endpoints: [
+                {
+                  tool: "arm_audit_get_logs",
+                  method: "GET",
+                  path: "/logs/audit_logs",
+                  query: ["startTime", "maxResults", "eventType"],
+                  responseFormat: "Array of CEF (Common Event Format) strings",
+                },
+                {
+                  tool: "arm_audit_download_logs",
+                  method: "GET",
+                  path: "/logs/audit_logs/download",
+                  query: ["startTime", "endTime"],
+                  responseFormat: "ZIP file (max 90-day range)",
+                },
+              ],
+              eventTypes: AUDIT_EVENT_TYPES,
+              cefFormat: "timestamp CEF:version|vendor|product|productVersion|eventType|name|severity|extensions",
+            },
+            null,
+            2,
+          ),
         },
       ],
     };
@@ -1061,6 +1361,29 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
             name: "build_number",
             required: false,
             description: "Optional build number to poll",
+          },
+        ],
+      },
+      {
+        name: "arm_audit_logs_guide",
+        description:
+          "Guide the model to query and analyze SIEM audit logs from AutoRABIT ARM",
+        arguments: [
+          {
+            name: "event_types",
+            required: false,
+            description:
+              "Comma-separated event types (e.g. LOGIN,DEPLOYMENT). Use arm_audit_list_event_types to discover valid values.",
+          },
+          {
+            name: "start_time",
+            required: false,
+            description: "Start time in ISO 8601 format (YYYY-MM-DDThh:mm:ss)",
+          },
+          {
+            name: "max_results",
+            required: false,
+            description: "Maximum number of log entries to retrieve (default 1000)",
           },
         ],
       },
@@ -1186,6 +1509,46 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
               "",
               "Report: build status, quick deploy status, rollback validation flag.",
               "If in progress, suggest polling again after a short delay.",
+            ].join("\n"),
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === "arm_audit_logs_guide") {
+    const eventTypes =
+      typeof args.event_types === "string" ? args.event_types : "<optional_event_types>";
+    const startTime =
+      typeof args.start_time === "string" ? args.start_time : "<optional_start_time>";
+    const maxResults =
+      typeof args.max_results === "string" ? args.max_results : "1000";
+
+    return {
+      description: "Audit log query and analysis flow",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              "Query and analyze SIEM audit logs from AutoRABIT ARM.",
+              "",
+              "Parameters:",
+              `- event_types: ${eventTypes}`,
+              `- start_time: ${startTime}`,
+              `- max_results: ${maxResults}`,
+              "",
+              "Steps:",
+              "1. Call `arm_audit_list_event_types` to review available event types and their modules",
+              "2. Call `arm_audit_get_logs` with the specified filters (startTime, maxResults, eventType)",
+              "3. Parse the CEF-formatted log entries — each line follows: timestamp CEF:version|vendor|product|productVersion|eventType|name|severity|extensions",
+              "4. Summarize findings:",
+              "   - Total number of log entries returned",
+              "   - Breakdown by event type",
+              "   - Notable patterns (failed logins, deployment activity, recent commits/merges)",
+              "   - Any anomalies or security concerns",
+              "5. If relevant, suggest narrower queries for deeper investigation",
             ].join("\n"),
           },
         },

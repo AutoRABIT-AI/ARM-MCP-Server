@@ -2,9 +2,11 @@
 
 [![CI](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml)
 
-MCP server for AutoRABIT ARM APIs, covering all CI Jobs v1 endpoints.
+MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints and SIEM Audit Logs.
 
 ## Modeled APIs
+
+### CI Jobs v1
 
 - `GET /api/cijobs/v1/listcijobs`
 - `GET /api/cijobs/v1/history/{ciJobName}`
@@ -18,7 +20,14 @@ MCP server for AutoRABIT ARM APIs, covering all CI Jobs v1 endpoints.
 - `POST /api/cijobs/v1/rollback`
 - `PUT /api/cijobs/v1/abort/{ciJobName}/{buildNumber?}`
 
+### SIEM Audit Logs
+
+- `GET /logs/audit_logs` — query audit logs with optional filters
+- `GET /logs/audit_logs/download` — download audit logs as ZIP (max 90-day range)
+
 ## MCP Tools
+
+### CI Jobs
 
 - `arm_list_ci_jobs` — list all CI jobs
 - `arm_ci_job_history` — retrieve CI job build history
@@ -33,11 +42,18 @@ MCP server for AutoRABIT ARM APIs, covering all CI Jobs v1 endpoints.
 - `arm_abort_ci_job` — abort an ongoing CI job
 - `arm_call_api` — generic fallback for any ARM endpoint
 
+### Audit Logs
+
+- `arm_audit_get_logs` — query SIEM audit logs with optional time, count, and event type filters
+- `arm_audit_download_logs` — download audit logs as ZIP for a date range
+- `arm_audit_list_event_types` — list the 12 known event types with descriptions (local, no API call)
+
 ## MCP Resources
 
 - `arm://docs/overview`
 - `arm://docs/cijobs-v1`
 - `arm://docs/auth`
+- `arm://docs/audit-logs`
 
 ## MCP Prompts
 
@@ -45,8 +61,11 @@ MCP server for AutoRABIT ARM APIs, covering all CI Jobs v1 endpoints.
 - `arm_rollback_guide`
 - `arm_trigger_build_guide`
 - `arm_poll_status_guide`
+- `arm_audit_logs_guide`
 
 ## Authentication
+
+### CI Jobs API
 
 ARM expects an API token in a `token` header.
 
@@ -59,6 +78,20 @@ Optional env vars:
 
 - `ARM_TIMEOUT_MS` (default `30000`)
 - `ARM_MAX_RETRIES` (default `2`)
+
+### SIEM Audit Logs API
+
+The audit logs API uses a **separate** base URL and Bearer token (not shared with CI Jobs).
+
+Required env vars:
+
+- `ARM_AUDIT_BASE_URL` (example: `auditlogs.autorabit.com`)
+- `ARM_AUDIT_API_TOKEN` — sent as `Authorization: Bearer <token>`
+
+Optional env vars:
+
+- `ARM_AUDIT_TIMEOUT_MS` (default `30000`)
+- `ARM_AUDIT_MAX_RETRIES` (default `2`)
 
 ## Setup
 
@@ -92,7 +125,9 @@ npm start
       "args": ["/absolute/path/to/arm-mcp-server/dist/index.js"],
       "env": {
         "ARM_BASE_URL": "pilot.autorabit.com",
-        "ARM_API_TOKEN": "YOUR_TOKEN"
+        "ARM_API_TOKEN": "YOUR_CI_JOBS_TOKEN",
+        "ARM_AUDIT_BASE_URL": "auditlogs.autorabit.com",
+        "ARM_AUDIT_API_TOKEN": "YOUR_AUDIT_BEARER_TOKEN"
       }
     }
   }
@@ -112,7 +147,9 @@ docker build -t arm-mcp-server .
 ```bash
 docker run -i --rm \
   -e ARM_BASE_URL=pilot.autorabit.com \
-  -e ARM_API_TOKEN=YOUR_TOKEN \
+  -e ARM_API_TOKEN=YOUR_CI_JOBS_TOKEN \
+  -e ARM_AUDIT_BASE_URL=auditlogs.autorabit.com \
+  -e ARM_AUDIT_API_TOKEN=YOUR_AUDIT_BEARER_TOKEN \
   arm-mcp-server
 ```
 
@@ -127,11 +164,15 @@ docker run -i --rm \
         "run", "-i", "--rm",
         "-e", "ARM_BASE_URL",
         "-e", "ARM_API_TOKEN",
+        "-e", "ARM_AUDIT_BASE_URL",
+        "-e", "ARM_AUDIT_API_TOKEN",
         "arm-mcp-server"
       ],
       "env": {
         "ARM_BASE_URL": "pilot.autorabit.com",
-        "ARM_API_TOKEN": "YOUR_TOKEN"
+        "ARM_API_TOKEN": "YOUR_CI_JOBS_TOKEN",
+        "ARM_AUDIT_BASE_URL": "auditlogs.autorabit.com",
+        "ARM_AUDIT_API_TOKEN": "YOUR_AUDIT_BEARER_TOKEN"
       }
     }
   }
@@ -258,4 +299,29 @@ docker compose run --rm arm-mcp-server
   "projectName": "MyProject",
   "title": "Release 1.2.3"
 }
+```
+
+### `arm_audit_get_logs`
+
+```json
+{
+  "startTime": "2024-01-15T00:00:00",
+  "maxResults": 500,
+  "eventType": "LOGIN,DEPLOYMENT"
+}
+```
+
+### `arm_audit_download_logs`
+
+```json
+{
+  "startTime": "2024-01-01T00:00:00",
+  "endTime": "2024-03-01T00:00:00"
+}
+```
+
+### `arm_audit_list_event_types`
+
+```json
+{}
 ```
