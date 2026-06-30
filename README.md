@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml)
 
-MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints and SIEM Audit Logs.
+MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints, Deployment Reporting v1 endpoints, and SIEM Audit Logs.
 
 ## Modeled APIs
 
@@ -19,6 +19,15 @@ MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints and SIEM Audit 
 - `POST /api/cijobs/v1/triggerquickdeploy/{ciJobName}/{buildNumber?}`
 - `POST /api/cijobs/v1/rollback`
 - `PUT /api/cijobs/v1/abort/{ciJobName}/{buildNumber?}`
+
+### Deployment Reporting v1
+
+- `GET /rabit/api/deployments/v1/list`
+- `GET /rabit/api/deployments/v1/{label}`
+- `GET /rabit/api/deployments/v1/{label}/components`
+- `GET /rabit/api/deployments/v1/{label}/stories`
+- `GET /rabit/api/deployments/v1/{label}/logs/{iterationNumber}`
+- `GET /rabit/api/deployments/v1/{label}/coverage/{iterationNumber}`
 
 ### SIEM Audit Logs
 
@@ -42,6 +51,15 @@ MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints and SIEM Audit 
 - `arm_abort_ci_job` — abort an ongoing CI job
 - `arm_call_api` — generic fallback for any ARM endpoint
 
+### Deployments
+
+- `arm_list_deployments` — list deployments with optional status, date, label, destination org, and limit filters
+- `arm_get_deployment` — retrieve deployment summary and iteration metadata
+- `arm_get_deployment_components` — retrieve component-level deployment changes
+- `arm_get_deployment_stories` — retrieve Jira stories and commit traceability
+- `arm_get_deployment_promotion_log` — retrieve the plain-text promotion log for an iteration
+- `arm_get_deployment_test_coverage` — retrieve Apex test and code coverage for an iteration
+
 ### Audit Logs
 
 - `arm_audit_get_logs` — query SIEM audit logs with optional time, count, and event type filters
@@ -52,6 +70,7 @@ MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints and SIEM Audit 
 
 - `arm://docs/overview`
 - `arm://docs/cijobs-v1`
+- `arm://docs/deployments-v1`
 - `arm://docs/auth`
 - `arm://docs/audit-logs`
 
@@ -61,11 +80,12 @@ MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints and SIEM Audit 
 - `arm_rollback_guide`
 - `arm_trigger_build_guide`
 - `arm_poll_status_guide`
+- `arm_deployment_report_guide`
 - `arm_audit_logs_guide`
 
 ## Authentication
 
-### CI Jobs API
+### CI Jobs and Deployment APIs
 
 ARM expects an API token in a `token` header.
 
@@ -78,6 +98,8 @@ Optional env vars:
 
 - `ARM_TIMEOUT_MS` (default `30000`)
 - `ARM_MAX_RETRIES` (default `2`)
+
+Deployment tools call `/rabit/api/deployments/v1/...` on the same ARM host and use the same `ARM_API_TOKEN`.
 
 ### SIEM Audit Logs API
 
@@ -298,6 +320,62 @@ docker compose run --rm arm-mcp-server
   "buildNumber": 7,
   "projectName": "MyProject",
   "title": "Release 1.2.3"
+}
+```
+
+### `arm_list_deployments`
+
+```json
+{
+  "status": "Successful",
+  "fromDate": "2025-01-01",
+  "toDate": "2025-06-30",
+  "labelName": "hotfix",
+  "destSfOrg": "prod@company.com",
+  "limit": 25
+}
+```
+
+### `arm_get_deployment`
+
+```json
+{
+  "label": "Deploy-March-Release-v1"
+}
+```
+
+### `arm_get_deployment_components`
+
+```json
+{
+  "label": "Deploy-March-Release-v1"
+}
+```
+
+### `arm_get_deployment_stories`
+
+```json
+{
+  "label": "Deploy-March-Release-v1",
+  "iterationNumber": 1
+}
+```
+
+### `arm_get_deployment_promotion_log`
+
+```json
+{
+  "label": "Deploy-March-Release-v1",
+  "iterationNumber": 1
+}
+```
+
+### `arm_get_deployment_test_coverage`
+
+```json
+{
+  "label": "Deploy-March-Release-v1",
+  "iterationNumber": 1
 }
 ```
 

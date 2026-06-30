@@ -92,6 +92,16 @@ function getStringArg(value: unknown, fieldName: string, required = true): strin
   throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a non-empty string`);
 }
 
+function getNumberArg(value: unknown, fieldName: string, required = true): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (!required && (value === undefined || value === null || value === "")) return undefined;
+  throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a finite number`);
+}
+
 function buildUrl(baseUrl: string, path: string, query?: JsonObject): string {
   const url = new URL(path, `${baseUrl}/`);
   if (query) {
@@ -267,6 +277,24 @@ const AUDIT_EVENT_TYPES = [
 ] as const;
 
 const VALID_EVENT_TYPE_NAMES = AUDIT_EVENT_TYPES.map((e) => e.eventType);
+const DEPLOYMENT_BASE_PATH = "/rabit/api/deployments/v1";
+const DEPLOYMENT_STATUSES = ["Successful", "Failed", "In Progress"] as const;
+
+function deploymentPath(path: string): string {
+  return `${DEPLOYMENT_BASE_PATH}${path}`;
+}
+
+function getDeploymentLabel(args: Record<string, unknown>): string {
+  return encodeURIComponent(getStringArg(args.label, "label")!);
+}
+
+function getDeploymentIterationSegment(args: Record<string, unknown>): string {
+  return encodeURIComponent(String(getNumberArg(args.iterationNumber, "iterationNumber")!));
+}
+
+function getDeploymentHeaders(args: Record<string, unknown>): JsonObject | undefined {
+  return asJsonObject(args.headers, "headers");
+}
 
 function formatToolResult(result: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
@@ -618,6 +646,164 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["projectName", "baseLineRevision"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_list_deployments",
+        description:
+          "GET /rabit/api/deployments/v1/list. Lists deployments with optional status, date range, label, destination org, and limit filters.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              enum: DEPLOYMENT_STATUSES,
+              description: "Optional deployment status filter",
+            },
+            fromDate: {
+              type: "string",
+              description: "Optional start date filter in YYYY-MM-DD format",
+            },
+            toDate: {
+              type: "string",
+              description: "Optional end date filter in YYYY-MM-DD format",
+            },
+            labelName: {
+              type: "string",
+              description: "Optional deployment label name filter",
+            },
+            destSfOrg: {
+              type: "string",
+              description: "Optional destination Salesforce org filter",
+            },
+            limit: {
+              type: "number",
+              description: "Optional maximum number of deployments to return. Maximum 100.",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_get_deployment",
+        description:
+          "GET /rabit/api/deployments/v1/{label}. Retrieves deployment-level details for a deployment label.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description: "Deployment label name",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["label"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_get_deployment_components",
+        description:
+          "GET /rabit/api/deployments/v1/{label}/components. Retrieves component-level changes for a deployment.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description: "Deployment label name",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["label"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_get_deployment_stories",
+        description:
+          "GET /rabit/api/deployments/v1/{label}/stories. Retrieves Jira stories and commit traceability for a deployment, optionally scoped to an iteration.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description: "Deployment label name",
+            },
+            iterationNumber: {
+              type: "number",
+              description: "Optional deployment iteration number",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["label"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_get_deployment_promotion_log",
+        description:
+          "GET /rabit/api/deployments/v1/{label}/logs/{iterationNumber}. Retrieves the plain-text promotion log for a deployment iteration.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description: "Deployment label name",
+            },
+            iterationNumber: {
+              type: "number",
+              description: "Deployment iteration number",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["label", "iterationNumber"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_get_deployment_test_coverage",
+        description:
+          "GET /rabit/api/deployments/v1/{label}/coverage/{iterationNumber}. Retrieves Apex test and code coverage details for a deployment iteration.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description: "Deployment label name",
+            },
+            iterationNumber: {
+              type: "number",
+              description: "Deployment iteration number",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["label", "iterationNumber"],
           additionalProperties: false,
         },
       },
@@ -1003,6 +1189,122 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return formatToolResult(result);
   }
 
+  if (toolName === "arm_list_deployments") {
+    const query: JsonObject = {};
+
+    const status = getStringArg(args.status, "status", false);
+    if (status) {
+      if (!DEPLOYMENT_STATUSES.includes(status as (typeof DEPLOYMENT_STATUSES)[number])) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Invalid status "${status}". Valid values: ${DEPLOYMENT_STATUSES.join(", ")}`,
+        );
+      }
+      query.status = status;
+    }
+
+    const fromDate = getStringArg(args.fromDate, "fromDate", false);
+    if (fromDate) query.fromDate = fromDate;
+
+    const toDate = getStringArg(args.toDate, "toDate", false);
+    if (toDate) query.toDate = toDate;
+
+    const labelName = getStringArg(args.labelName, "labelName", false);
+    if (labelName) query.labelName = labelName;
+
+    const destSfOrg = getStringArg(args.destSfOrg, "destSfOrg", false);
+    if (destSfOrg) query.destSfOrg = destSfOrg;
+
+    const limit = getNumberArg(args.limit, "limit", false);
+    if (limit !== undefined) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw new McpError(ErrorCode.InvalidParams, "limit must be an integer from 1 to 100");
+      }
+      query.limit = limit;
+    }
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath("/list"),
+      method: "GET",
+      query,
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_get_deployment") {
+    const label = getDeploymentLabel(args);
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath(`/${label}`),
+      method: "GET",
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_get_deployment_components") {
+    const label = getDeploymentLabel(args);
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath(`/${label}/components`),
+      method: "GET",
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_get_deployment_stories") {
+    const label = getDeploymentLabel(args);
+    const iterationNumber = getNumberArg(args.iterationNumber, "iterationNumber", false);
+    const query: JsonObject = {};
+    if (iterationNumber !== undefined) query.iterationNumber = iterationNumber;
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath(`/${label}/stories`),
+      method: "GET",
+      query,
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_get_deployment_promotion_log") {
+    const label = getDeploymentLabel(args);
+    const iterationNumber = getDeploymentIterationSegment(args);
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath(`/${label}/logs/${iterationNumber}`),
+      method: "GET",
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_get_deployment_test_coverage") {
+    const label = getDeploymentLabel(args);
+    const iterationNumber = getDeploymentIterationSegment(args);
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath(`/${label}/coverage/${iterationNumber}`),
+      method: "GET",
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
   if (toolName === "arm_call_api") {
     const path = typeof args.path === "string" ? args.path : undefined;
     const method = typeof args.method === "string" ? args.method.toUpperCase() : undefined;
@@ -1043,6 +1345,12 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
         uri: "arm://docs/cijobs-v1",
         name: "ARM CIJobs v1 APIs",
         description: "Modeled APIs from /api/cijobs/v1",
+        mimeType: "application/json",
+      },
+      {
+        uri: "arm://docs/deployments-v1",
+        name: "ARM Deployments v1 APIs",
+        description: "Modeled deployment reporting APIs from /rabit/api/deployments/v1",
         mimeType: "application/json",
       },
       {
@@ -1093,9 +1401,17 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
                   "GET /logs/audit_logs",
                   "GET /logs/audit_logs/download",
                 ],
+                deployments: [
+                  "GET /rabit/api/deployments/v1/list",
+                  "GET /rabit/api/deployments/v1/{label}",
+                  "GET /rabit/api/deployments/v1/{label}/components",
+                  "GET /rabit/api/deployments/v1/{label}/stories",
+                  "GET /rabit/api/deployments/v1/{label}/logs/{iterationNumber}",
+                  "GET /rabit/api/deployments/v1/{label}/coverage/{iterationNumber}",
+                ],
               },
               utilityFeatures: [
-                "CI Jobs: token header auth (ARM_API_TOKEN)",
+                "CI Jobs and Deployments: token header auth (ARM_API_TOKEN)",
                 "Audit Logs: Bearer token auth (ARM_AUDIT_API_TOKEN)",
                 "Base URL normalization with implicit https",
                 "Timeout + retries",
@@ -1195,6 +1511,64 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     };
   }
 
+  if (uri === "arm://docs/deployments-v1") {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify(
+            [
+              {
+                tool: "arm_list_deployments",
+                method: "GET",
+                path: "/rabit/api/deployments/v1/list",
+                query: ["status", "fromDate", "toDate", "labelName", "destSfOrg", "limit"],
+                validStatuses: DEPLOYMENT_STATUSES,
+                maxLimit: 100,
+              },
+              {
+                tool: "arm_get_deployment",
+                method: "GET",
+                path: "/rabit/api/deployments/v1/{label}",
+                pathParams: ["label"],
+              },
+              {
+                tool: "arm_get_deployment_components",
+                method: "GET",
+                path: "/rabit/api/deployments/v1/{label}/components",
+                pathParams: ["label"],
+              },
+              {
+                tool: "arm_get_deployment_stories",
+                method: "GET",
+                path: "/rabit/api/deployments/v1/{label}/stories",
+                pathParams: ["label"],
+                query: ["iterationNumber"],
+              },
+              {
+                tool: "arm_get_deployment_promotion_log",
+                method: "GET",
+                path: "/rabit/api/deployments/v1/{label}/logs/{iterationNumber}",
+                pathParams: ["label", "iterationNumber"],
+                responseFormat: "Plain text promotion log",
+              },
+              {
+                tool: "arm_get_deployment_test_coverage",
+                method: "GET",
+                path: "/rabit/api/deployments/v1/{label}/coverage/{iterationNumber}",
+                pathParams: ["label", "iterationNumber"],
+                responseFormat: "JSON test coverage report",
+              },
+            ],
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  }
+
   if (uri === "arm://docs/auth") {
     return {
       contents: [
@@ -1204,7 +1578,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           text: [
             "# ARM Auth",
             "",
-            "## CI Jobs API",
+            "## CI Jobs and Deployment APIs",
             "",
             "Set these environment variables before starting the MCP server:",
             "",
@@ -1212,6 +1586,8 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             "- `ARM_API_TOKEN`: API token sent as `token` header",
             "- `ARM_TIMEOUT_MS` (optional): request timeout in milliseconds, default `30000`",
             "- `ARM_MAX_RETRIES` (optional): retry count for network failures, default `2`",
+            "",
+            "Deployment reporting tools call `/rabit/api/deployments/v1/...` and share the same `token` header auth.",
             "",
             "Default headers sent:",
             "- `token: <ARM_API_TOKEN>`",
@@ -1387,6 +1763,23 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
           },
         ],
       },
+      {
+        name: "arm_deployment_report_guide",
+        description:
+          "Guide the model to collect deployment detail, components, Jira stories, logs, and test coverage for a deployment report",
+        arguments: [
+          {
+            name: "label",
+            required: true,
+            description: "Deployment label name",
+          },
+          {
+            name: "iteration_number",
+            required: false,
+            description: "Deployment iteration number for logs and coverage. Use latestIterationNumber from detail if omitted.",
+          },
+        ],
+      },
     ],
   };
 });
@@ -1549,6 +1942,39 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
               "   - Notable patterns (failed logins, deployment activity, recent commits/merges)",
               "   - Any anomalies or security concerns",
               "5. If relevant, suggest narrower queries for deeper investigation",
+            ].join("\n"),
+          },
+        },
+      ],
+    };
+  }
+
+  if (name === "arm_deployment_report_guide") {
+    const label = typeof args.label === "string" ? args.label : "<deployment_label>";
+    const iterationNumber =
+      typeof args.iteration_number === "string" ? args.iteration_number : "<latest_iteration_number>";
+
+    return {
+      description: "Deployment reporting and traceability flow",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: [
+              "Generate a deployment report for this ARM deployment:",
+              `- label: ${label}`,
+              `- iteration_number: ${iterationNumber}`,
+              "",
+              "Steps:",
+              "1. Call `arm_get_deployment` for summary details and latest iteration metadata",
+              "2. Call `arm_get_deployment_components` for component changes",
+              "3. Call `arm_get_deployment_stories` for Jira-linked commit traceability",
+              "4. Call `arm_get_deployment_promotion_log` for the selected iteration",
+              "5. Call `arm_get_deployment_test_coverage` for the selected iteration",
+              "",
+              "Summarize: deployment status, source and target environments, triggering user, changed components by type and change type, Jira stories with commits, notable log diagnostics, and test coverage pass/fail counts.",
+              "If iteration_number is omitted, use the latestIterationNumber from `arm_get_deployment` for logs and coverage.",
             ].join("\n"),
           },
         },
