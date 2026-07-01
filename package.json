@@ -1,14 +1,43 @@
 {
-  "name": "arm-mcp-server",
+  "name": "@autorabit-ai/arm-mcp-server",
   "version": "0.3.0",
-  "private": true,
   "description": "MCP server for AutoRABIT ARM Developer APIs",
   "type": "module",
+  "license": "MIT",
   "main": "dist/index.js",
+  "bin": {
+    "arm-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AutoRABIT-AI/ARM-MCP-Server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AutoRABIT-AI/ARM-MCP-Server/issues"
+  },
+  "homepage": "https://github.com/AutoRABIT-AI/ARM-MCP-Server#readme",
+  "keywords": [
+    "autorabit",
+    "arm",
+    "mcp",
+    "model-context-protocol",
+    "ci",
+    "cd",
+    "devops",
+    "release-management"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"

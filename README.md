@@ -1,6 +1,9 @@
 # ARM MCP Server
 
-[![CI](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/Presh-AR/ARM-MCP-Server/actions/workflows/ci.yml)
+[![CI](https://github.com/AutoRABIT-AI/ARM-MCP-Server/actions/workflows/ci.yml/badge.svg)](https://github.com/AutoRABIT-AI/ARM-MCP-Server/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@autorabit-ai/arm-mcp-server?logo=npm)](https://www.npmjs.com/package/@autorabit-ai/arm-mcp-server)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?logo=node.js)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 MCP server for AutoRABIT ARM APIs, covering CI Jobs v1 endpoints, Deployment Reporting v1 endpoints, and SIEM Audit Logs.
 
