@@ -123,7 +123,7 @@ test("all dedicated tools expose and execute the published API contracts", async
 
   try {
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 28);
+    assert.equal(tools.tools.length, 30);
     assert(tools.tools.every((tool) => tool.annotations));
     assert(tools.tools.every((tool) => tool.outputSchema?.type === "object"));
 
@@ -228,6 +228,17 @@ test("all dedicated tools expose and execute the published API contracts", async
       ["arm_get_deployment_promotion_log", { label: "Release 26.3", iterationNumber: 2 }],
       ["arm_get_deployment_test_coverage", { label: "Release 26.3", iterationNumber: 2 }],
       [
+        "arm_create_branch_pr_from_manifest",
+        {
+          packageManifest: "<Package><types><members>*</members><name>ApexClass</name></types></Package>",
+          orgName: "Dev Sandbox",
+          repoName: "repo",
+          baseBranch: "main",
+          jiraKey: "AR-1",
+        },
+      ],
+      ["arm_get_branch_pr_status", { requestId: "req 1" }],
+      [
         "arm_audit_get_logs",
         {
           startTime: "2026-07-01T00:00:00Z",
@@ -263,7 +274,7 @@ test("all dedicated tools expose and execute the published API contracts", async
     assert.deepEqual(await readFile(downloadedPath), ZIP_BYTES);
     assert.equal((await stat(downloadedPath)).mode & 0o777, 0o600);
 
-    assert.equal(requests.length, 26);
+    assert.equal(requests.length, 28);
     assert.deepEqual(
       requests.map(({ method, path }) => ({ method, path })),
       [
@@ -298,6 +309,8 @@ test("all dedicated tools expose and execute the published API contracts", async
         },
         { method: "GET", path: "/api/deployments/v1/Release%2026.3/logs/2" },
         { method: "GET", path: "/api/deployments/v1/Release%2026.3/coverage/2" },
+        { method: "POST", path: "/api/vc/v1/branch-pr" },
+        { method: "GET", path: "/api/vc/v1/branch-pr/req%201" },
         {
           method: "GET",
           path:
@@ -312,14 +325,21 @@ test("all dedicated tools expose and execute the published API contracts", async
     );
 
     assert.equal(requests[0].correlationId, "contract");
-    assert(requests.slice(0, 24).every((request) => request.token === "arm-test-token"));
+    assert(requests.slice(0, 26).every((request) => request.token === "arm-test-token"));
     assert(
       requests
-        .slice(24)
+        .slice(26)
         .every((request) => request.authorization === "Bearer audit-test-token"),
     );
     assert(requests.filter((request) => request.method === "GET").every((request) => !request.body));
     assert.deepEqual(requests[6].body, { projectName: "Project", title: "Release" });
+    assert.deepEqual(requests[24].body, {
+      packageManifest: "<Package><types><members>*</members><name>ApexClass</name></types></Package>",
+      orgName: "Dev Sandbox",
+      repoName: "repo",
+      baseBranch: "main",
+      jiraKey: "AR-1",
+    });
     assert.deepEqual(requests[13].body, {
       jobName: "Feature Migration",
       jobHistory: {
@@ -443,7 +463,7 @@ test("generic API access is hidden and blocked by default", async () => {
 
   try {
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 27);
+    assert.equal(tools.tools.length, 29);
     assert(!tools.tools.some((tool) => tool.name === "arm_call_api"));
     await assert.rejects(
       client.callTool({

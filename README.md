@@ -5,7 +5,7 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Model Context Protocol (MCP) server for AutoRABIT ARM Developer APIs. It provides 27 dedicated tools for CI Jobs, nCino CI Jobs, deployment reporting, and SIEM audit logs, plus resources and guided prompts for common workflows.
+Model Context Protocol (MCP) server for AutoRABIT ARM Developer APIs. It provides 29 dedicated tools for CI Jobs, nCino CI Jobs, deployment reporting, version control branch and pull request automation, and SIEM audit logs, plus resources and guided prompts for common workflows.
 
 ## Requirements
 
@@ -143,6 +143,28 @@ Trigger and monitor an nCino build:
   "arguments": {
     "jobName": "nCino Feature Migration",
     "buildNumber": 42
+  }
+}
+```
+
+### Version Control Branch and Pull Request
+
+| Tool | ARM endpoint |
+| --- | --- |
+| `arm_create_branch_pr_from_manifest` | `POST /api/vc/v1/branch-pr` |
+| `arm_get_branch_pr_status` | `GET /api/vc/v1/branch-pr/{requestId}` |
+
+`arm_create_branch_pr_from_manifest` starts an asynchronous request and returns a `requestId`. ARM creates a branch from `baseBranch`, retrieves the metadata listed in `packageManifest` from the target org, commits it to the new branch, updates the Jira story when `jiraKey` is sent, and creates a pull request. Poll `arm_get_branch_pr_status` for per-step progress, the branch, the commit, the Jira update, the pull request URL, and any error with partial results. If a step fails after the branch is created, ARM deletes the branch and reports that in the status response. The create tool does not retry automatically.
+
+```json
+{
+  "name": "arm_create_branch_pr_from_manifest",
+  "arguments": {
+    "packageManifest": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Package xmlns=\"http://soap.sforce.com/2006/04/metadata\"><types><members>*</members><name>ApexClass</name></types><version>66.0</version></Package>",
+    "orgName": "Dev Sandbox",
+    "repoName": "salesforce-repo",
+    "baseBranch": "main",
+    "jiraKey": "AR-12345"
   }
 }
 ```

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-10-21
+
+### Added
+
+- `arm_create_branch_pr_from_manifest` and `arm_get_branch_pr_status` tools for the asynchronous ARM branch and pull request API (`/api/vc/v1/branch-pr`).
+
 ## [0.5.0] - 2026-08-10
 
 ### Added

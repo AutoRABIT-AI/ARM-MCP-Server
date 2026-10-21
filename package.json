@@ -1,6 +1,6 @@
 {
   "name": "@autorabit-ai/arm-mcp-server",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "MCP server for AutoRABIT ARM Developer APIs",
   "license": "MIT",
   "type": "module",
