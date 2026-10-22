@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `arm_create_branch_pr_from_manifest` and `arm_get_branch_pr_status` tools for the asynchronous ARM branch and pull request API (`/api/vc/v1/branch-pr`).
+- `arm_create_branch_pr_from_manifest` and `arm_get_branch_pr_status` tools for the asynchronous ARM branch and pull request API (`/api/vc/v1/branch-pr`), including the `useExistingBranch` option.
 
 ## [0.5.0] - 2026-08-10
 

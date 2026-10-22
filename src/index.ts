@@ -1000,7 +1000,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             branchName: {
               type: "string",
-              description: "Optional name for the new branch. Generated when omitted.",
+              description:
+                "Optional name for the new branch. Generated when omitted. Required when useExistingBranch is true.",
+            },
+            useExistingBranch: {
+              type: "boolean",
+              description:
+                "Optional, default false. When true, branchName must name a branch that already exists in the repository (it need not be registered in ARM; ARM registers it if needed). The metadata is committed onto that branch and the pull request is raised from it. The branch is never deleted, even on failure.",
             },
             commitMessage: {
               type: "string",
@@ -1831,6 +1837,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       repoName: getStringArg(args.repoName, "repoName"),
       baseBranch: getStringArg(args.baseBranch, "baseBranch"),
     };
+    const useExistingBranch = getBooleanArg(args.useExistingBranch, "useExistingBranch", false);
+    if (useExistingBranch !== undefined) {
+      body.useExistingBranch = useExistingBranch;
+    }
     for (const field of [
       "jiraKey",
       "almLabel",

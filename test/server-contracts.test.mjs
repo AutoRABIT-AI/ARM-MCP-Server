@@ -235,6 +235,8 @@ test("all dedicated tools expose and execute the published API contracts", async
           repoName: "repo",
           baseBranch: "main",
           jiraKey: "AR-1",
+          branchName: "feature-1",
+          useExistingBranch: true,
         },
       ],
       ["arm_get_branch_pr_status", { requestId: "req 1" }],
@@ -338,7 +340,9 @@ test("all dedicated tools expose and execute the published API contracts", async
       orgName: "Dev Sandbox",
       repoName: "repo",
       baseBranch: "main",
+      useExistingBranch: true,
       jiraKey: "AR-1",
+      branchName: "feature-1",
     });
     assert.deepEqual(requests[13].body, {
       jobName: "Feature Migration",
