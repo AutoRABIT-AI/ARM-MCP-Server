@@ -1003,6 +1003,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               description:
                 "Optional name for the new branch. Generated when omitted. Required when useExistingBranch is true.",
             },
+            sfdxFolderName: {
+              type: "string",
+              description:
+                "Optional package directory for DX (source format) repositories. Defaults when the repository has one package directory; required when it has several. Must not be sent for metadata format repositories.",
+            },
             useExistingBranch: {
               type: "boolean",
               description:
@@ -1848,6 +1853,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       "commitMessage",
       "prTitle",
       "prDescription",
+      "sfdxFolderName",
     ]) {
       const value = getStringArg(args[field], field, false);
       if (value !== undefined) body[field] = value;
