@@ -5,7 +5,7 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Model Context Protocol (MCP) server for AutoRABIT ARM Developer APIs. It provides 27 dedicated tools for CI Jobs, nCino CI Jobs, deployment reporting, and SIEM audit logs, plus resources and guided prompts for common workflows.
+Model Context Protocol (MCP) server for AutoRABIT ARM Developer APIs. It provides 29 dedicated tools for CI Jobs, nCino CI Jobs, deployment reporting, version control branch and pull request automation, and SIEM audit logs, plus resources and guided prompts for common workflows.
 
 ## Requirements
 
@@ -143,6 +143,28 @@ Trigger and monitor an nCino build:
   "arguments": {
     "jobName": "nCino Feature Migration",
     "buildNumber": 42
+  }
+}
+```
+
+### Version Control Branch and Pull Request
+
+| Tool | ARM endpoint |
+| --- | --- |
+| `arm_create_branch_pr_from_manifest` | `POST /api/vc/v1/branch-pr` |
+| `arm_get_branch_pr_status` | `GET /api/vc/v1/branch-pr/{requestId}` |
+
+`arm_create_branch_pr_from_manifest` starts an asynchronous request and returns a `requestId`. ARM creates a branch from `baseBranch`, retrieves the metadata listed in `packageManifest` from the target org, commits it to the new branch, updates the Jira story when `jiraKey` is sent, and creates a pull request. Poll `arm_get_branch_pr_status` for per-step progress, the branch, the commit, the Jira update, the pull request URL, and any error with partial results. If a step fails after ARM created the branch, ARM deletes that branch and reports it in the status response. To commit onto a branch that already exists in the repository, set `useExistingBranch` to `true` and send its `branchName`: the branch need not be registered in ARM (ARM registers it if needed), and it is never deleted, even on failure. Existing-branch commits and new-branch commits both appear in ARM Commit History. For DX (source format) repositories, send `sfdxFolderName` to choose the package directory when the repository has more than one. The create tool does not retry automatically.
+
+```json
+{
+  "name": "arm_create_branch_pr_from_manifest",
+  "arguments": {
+    "packageManifest": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Package xmlns=\"http://soap.sforce.com/2006/04/metadata\"><types><members>*</members><name>ApexClass</name></types><version>66.0</version></Package>",
+    "orgName": "Dev Sandbox",
+    "repoName": "salesforce-repo",
+    "baseBranch": "main",
+    "jiraKey": "AR-12345"
   }
 }
 ```

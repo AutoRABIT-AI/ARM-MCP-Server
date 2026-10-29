@@ -625,6 +625,8 @@ const TOOL_ANNOTATIONS: Record<
   arm_rollback_history: READ_ONLY_TOOL,
   arm_rollback_details: READ_ONLY_TOOL,
   arm_trigger_build: MUTATING_TOOL,
+  arm_create_branch_pr_from_manifest: MUTATING_TOOL,
+  arm_get_branch_pr_status: READ_ONLY_TOOL,
   arm_update_baseline_revision: {
     readOnlyHint: false,
     destructiveHint: false,
@@ -668,7 +670,7 @@ const TOOL_OUTPUT_SCHEMA = {
 const server = new Server(
   {
     name: "arm-mcp-server",
-    version: "0.5.0",
+    version: "0.6.0",
   },
   {
     capabilities: {
@@ -960,6 +962,97 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
           },
           required: ["projectName", "baseLineRevision"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_create_branch_pr_from_manifest",
+        description:
+          "POST /api/vc/v1/branch-pr. Starts an asynchronous request that creates a branch from the base branch, retrieves the metadata listed in the package manifest from the target Salesforce org, commits it to the new branch, optionally updates the Jira story, and creates a pull request. Returns a requestId; poll arm_get_branch_pr_status for the branch, commit, Jira update, and pull request URL. Mutation: not retried automatically.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            packageManifest: {
+              type: "string",
+              description: "package.xml content listing the metadata to retrieve",
+            },
+            orgName: {
+              type: "string",
+              description: "Name of the target Salesforce org registered in ARM",
+            },
+            repoName: {
+              type: "string",
+              description: "ARM repository name",
+            },
+            baseBranch: {
+              type: "string",
+              description: "Branch to create the new branch from and to open the pull request against",
+            },
+            jiraKey: {
+              type: "string",
+              description:
+                "Optional Jira issue key. When set, the Jira story is updated and, if branchName is omitted, the branch name is derived from the key.",
+            },
+            almLabel: {
+              type: "string",
+              description:
+                "Optional ARM ALM system label for Jira. Required only when the org has more than one Jira system.",
+            },
+            branchName: {
+              type: "string",
+              description:
+                "Optional name for the new branch. Generated when omitted. Required when useExistingBranch is true.",
+            },
+            sfdxFolderName: {
+              type: "string",
+              description:
+                "Optional package directory for DX (source format) repositories. Defaults when the repository has one package directory; required when it has several. Must not be sent for metadata format repositories.",
+            },
+            useExistingBranch: {
+              type: "boolean",
+              description:
+                "Optional, default false. When true, branchName must name a branch that already exists in the repository (it need not be registered in ARM; ARM registers it if needed). The metadata is committed onto that branch and the pull request is raised from it. The branch is never deleted, even on failure.",
+            },
+            commitMessage: {
+              type: "string",
+              description: "Optional commit message",
+            },
+            prTitle: {
+              type: "string",
+              description: "Optional pull request title",
+            },
+            prDescription: {
+              type: "string",
+              description: "Optional pull request description",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["packageManifest", "orgName", "repoName", "baseBranch"],
+          additionalProperties: false,
+        },
+      },
+      {
+        name: "arm_get_branch_pr_status",
+        description:
+          "GET /api/vc/v1/branch-pr/{requestId}. Returns the status of a branch and pull request request: per-step progress, branch, commit, Jira update, pull request URL, and any error or partial results.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            requestId: {
+              type: "string",
+              description: "requestId returned by arm_create_branch_pr_from_manifest",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["requestId"],
           additionalProperties: false,
         },
       },
@@ -1742,6 +1835,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return formatToolResult(result);
   }
 
+  if (toolName === "arm_create_branch_pr_from_manifest") {
+    const body: JsonObject = {
+      packageManifest: getStringArg(args.packageManifest, "packageManifest"),
+      orgName: getStringArg(args.orgName, "orgName"),
+      repoName: getStringArg(args.repoName, "repoName"),
+      baseBranch: getStringArg(args.baseBranch, "baseBranch"),
+    };
+    const useExistingBranch = getBooleanArg(args.useExistingBranch, "useExistingBranch", false);
+    if (useExistingBranch !== undefined) {
+      body.useExistingBranch = useExistingBranch;
+    }
+    for (const field of [
+      "jiraKey",
+      "almLabel",
+      "branchName",
+      "commitMessage",
+      "prTitle",
+      "prDescription",
+      "sfdxFolderName",
+    ]) {
+      const value = getStringArg(args[field], field, false);
+      if (value !== undefined) body[field] = value;
+    }
+
+    const result = await armRequest({
+      config,
+      path: "/api/vc/v1/branch-pr",
+      method: "POST",
+      body,
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
+  if (toolName === "arm_get_branch_pr_status") {
+    const requestId = encodeURIComponent(getStringArg(args.requestId, "requestId")!);
+
+    const result = await armRequest({
+      config,
+      path: `/api/vc/v1/branch-pr/${requestId}`,
+      method: "GET",
+      extraHeaders: asJsonObject(args.headers, "headers"),
+    });
+
+    return formatToolResult(result);
+  }
+
   if (toolName === "arm_ncino_list_ci_jobs") {
     const result = await armRequest({
       config,
@@ -2064,7 +2205,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           text: JSON.stringify(
             {
               server: "arm-mcp-server",
-              version: "0.5.0",
+              version: "0.6.0",
               capabilities: ["tools", "resources", "prompts"],
               modeledApis: {
                 ciJobs: [
