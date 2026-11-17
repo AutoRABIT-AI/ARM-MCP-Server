@@ -453,6 +453,26 @@ const VALID_EVENT_TYPE_NAMES = AUDIT_EVENT_TYPES.map((e) => e.eventType);
 const NCINO_CI_BASE_PATH = "/api/cijobs/v1/ncino";
 const DEPLOYMENT_BASE_PATH = "/api/deployments/v1";
 const DEPLOYMENT_STATUSES = ["Successful", "Failed", "In Progress"] as const;
+const DEPLOYMENT_TEST_LEVELS = [
+  "UseSalesforceDefaults",
+  "NoTestRun",
+  "RunSpecifiedTests",
+  "RunLocalTests",
+  "RunAllTestsInOrg",
+  "RunTestsBasedOnChanges",
+  "RunRelevantTests",
+] as const;
+const DEPLOYMENT_BOOLEAN_OPTIONS = [
+  "validateOnly",
+  "skipWarnings",
+  "takeBackup",
+  "ignoreMissingVisibilitySettings",
+  "removeLoginIpRanges",
+  "removeSystemAndUserPermissions",
+  "skipMembers",
+  "skipDestructiveChanges",
+  "ignoreInstalledComponents",
+] as const;
 
 function ncinoCiPath(path: string): string {
   return `${NCINO_CI_BASE_PATH}${path}`;
@@ -564,6 +584,24 @@ function getDeploymentIterationSegment(args: Record<string, unknown>): string {
   );
 }
 
+function getSelectedTestsArg(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const items = typeof value === "string" ? value.split(",") : value;
+  if (!Array.isArray(items)) {
+    throw new McpError(ErrorCode.InvalidParams, "selectedTests must be a list of Apex test class names");
+  }
+  const names = items.map((item) => {
+    if (typeof item !== "string" || item.trim().length === 0) {
+      throw new McpError(ErrorCode.InvalidParams, "selectedTests must contain non-empty Apex test class names");
+    }
+    return item.trim();
+  });
+  if (names.length === 0) {
+    throw new McpError(ErrorCode.InvalidParams, "selectedTests must not be empty");
+  }
+  return names;
+}
+
 function getDeploymentHeaders(args: Record<string, unknown>): JsonObject | undefined {
   return asJsonObject(args.headers, "headers");
 }
@@ -646,6 +684,7 @@ const TOOL_ANNOTATIONS: Record<
   arm_get_deployment_stories: READ_ONLY_TOOL,
   arm_get_deployment_promotion_log: READ_ONLY_TOOL,
   arm_get_deployment_test_coverage: READ_ONLY_TOOL,
+  arm_deploy_release_label: MUTATING_TOOL,
   arm_call_api: MUTATING_TOOL,
   arm_audit_get_logs: READ_ONLY_TOOL,
   arm_audit_download_logs: {
@@ -670,7 +709,7 @@ const TOOL_OUTPUT_SCHEMA = {
 const server = new Server(
   {
     name: "arm-mcp-server",
-    version: "0.6.0",
+    version: "0.7.0",
   },
   {
     capabilities: {
@@ -1446,6 +1485,85 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
+        name: "arm_deploy_release_label",
+        description:
+          "POST /api/deployments/v1/deploy. Deploys an existing release label's artifact (deploy type Full) to a registered destination org. Returns 202 with status INITIATED, the deployment label and the iteration number; follow progress with arm_get_deployment. Reusing a deployment label adds a new iteration. Changes the destination org unless validateOnly is true. Mutation: not retried automatically.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            releaseLabelName: {
+              type: "string",
+              description: "Release label whose artifact is deployed. The artifact must already be created.",
+            },
+            destinationOrgName: {
+              type: "string",
+              description: "Destination org name as registered in ARM",
+            },
+            deploymentLabel: {
+              type: "string",
+              description: "Name of the deployment in Deployment History. Reusing a name adds a new iteration.",
+            },
+            validateOnly: {
+              type: "boolean",
+              description: "Validate only (check-only deploy); nothing is changed in the org. Default false.",
+            },
+            skipWarnings: {
+              type: "boolean",
+              description: "Skip warnings. Default false.",
+            },
+            takeBackup: {
+              type: "boolean",
+              description: "Take a backup of the destination org before deploying. Default false.",
+            },
+            ignoreMissingVisibilitySettings: {
+              type: "boolean",
+              description: "Ignore missing visibility settings. Default false.",
+            },
+            removeLoginIpRanges: {
+              type: "boolean",
+              description: "Remove login IP ranges. Default false.",
+            },
+            removeSystemAndUserPermissions: {
+              type: "boolean",
+              description: "Remove system and user permissions. Default false.",
+            },
+            skipMembers: {
+              type: "boolean",
+              description: "Do not include skip members. Default false.",
+            },
+            skipDestructiveChanges: {
+              type: "boolean",
+              description: "Do not include destructive members. Default false.",
+            },
+            ignoreInstalledComponents: {
+              type: "boolean",
+              description: "Ignore installed (managed package) components. Default false.",
+            },
+            testLevel: {
+              type: "string",
+              enum: [...DEPLOYMENT_TEST_LEVELS],
+              description: "Apex test level. Defaults to UseSalesforceDefaults.",
+            },
+            selectedTests: {
+              type: "array",
+              items: { type: "string" },
+              description: "Apex test classes to run. Required when testLevel is RunSpecifiedTests.",
+            },
+            note: {
+              type: "string",
+              description: "Optional deployment note",
+            },
+            headers: {
+              type: "object",
+              description: "Optional extra headers",
+              additionalProperties: true,
+            },
+          },
+          required: ["releaseLabelName", "destinationOrgName", "deploymentLabel"],
+          additionalProperties: false,
+        },
+      },
+      {
         name: "arm_call_api",
         description:
           "Optional generic ARM API request tool for /api endpoints not yet modeled as dedicated tools. Disabled unless ARM_ENABLE_GENERIC_TOOL=true.",
@@ -2115,6 +2233,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return formatToolResult(result);
   }
 
+  if (toolName === "arm_deploy_release_label") {
+    const body: JsonObject = {
+      releaseLabelName: getStringArg(args.releaseLabelName, "releaseLabelName"),
+      destinationOrgName: getStringArg(args.destinationOrgName, "destinationOrgName"),
+      deploymentLabel: getStringArg(args.deploymentLabel, "deploymentLabel"),
+    };
+    for (const option of DEPLOYMENT_BOOLEAN_OPTIONS) {
+      const value = getBooleanArg(args[option], option, false);
+      if (value !== undefined) body[option] = value;
+    }
+    const testLevel = getStringArg(args.testLevel, "testLevel", false);
+    if (testLevel !== undefined) {
+      if (!DEPLOYMENT_TEST_LEVELS.some((level) => level.toLowerCase() === testLevel.toLowerCase())) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `testLevel must be one of: ${DEPLOYMENT_TEST_LEVELS.join(", ")}`,
+        );
+      }
+      body.testLevel = testLevel;
+    }
+    const selectedTests = getSelectedTestsArg(args.selectedTests);
+    if (testLevel?.toLowerCase() === "runspecifiedtests" && selectedTests === undefined) {
+      throw new McpError(ErrorCode.InvalidParams, "selectedTests is required when testLevel is RunSpecifiedTests");
+    }
+    if (selectedTests !== undefined) body.selectedTests = selectedTests;
+    const note = getStringArg(args.note, "note", false);
+    if (note !== undefined) body.note = note;
+
+    const result = await armRequest({
+      config,
+      path: deploymentPath("/deploy"),
+      method: "POST",
+      body,
+      extraHeaders: getDeploymentHeaders(args),
+    });
+
+    return formatToolResult(result);
+  }
+
   if (toolName === "arm_call_api") {
     const path = typeof args.path === "string" ? args.path : undefined;
     const method = typeof args.method === "string" ? args.method.toUpperCase() : undefined;
@@ -2174,7 +2331,7 @@ server.setRequestHandler(ListResourcesRequestSchema, async () => {
       {
         uri: "arm://docs/deployments-v1",
         name: "ARM Deployments v1 APIs",
-        description: "Modeled deployment reporting APIs from /api/deployments/v1",
+        description: "Modeled deployment reporting and release label deploy APIs from /api/deployments/v1",
         mimeType: "application/json",
       },
       {
@@ -2205,7 +2362,7 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
           text: JSON.stringify(
             {
               server: "arm-mcp-server",
-              version: "0.6.0",
+              version: "0.7.0",
               capabilities: ["tools", "resources", "prompts"],
               modeledApis: {
                 ciJobs: [
@@ -2522,6 +2679,23 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
                 path: "/api/deployments/v1/{label}/coverage/{iterationNumber}",
                 pathParams: ["label", "iterationNumber"],
                 responseFormat: "JSON test coverage report",
+              },
+              {
+                tool: "arm_deploy_release_label",
+                method: "POST",
+                path: "/api/deployments/v1/deploy",
+                required: ["releaseLabelName", "destinationOrgName", "deploymentLabel"],
+                optional: [
+                  ...DEPLOYMENT_BOOLEAN_OPTIONS,
+                  "testLevel",
+                  "selectedTests",
+                  "note",
+                ],
+                testLevels: DEPLOYMENT_TEST_LEVELS,
+                responseFormat: "202 with status INITIATED, deploymentLabel, iterationNumber, releaseLabelName and destinationOrgName",
+                errors: "ARM-DEP-API-001 to ARM-DEP-API-017 (400, 403, 404, 409, 422, 500)",
+                followUp: "arm_get_deployment with the deploymentLabel",
+                mutation: true,
               },
             ],
             null,
