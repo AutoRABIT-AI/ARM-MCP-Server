@@ -94,4 +94,4 @@ Before publishing, compare record counts and a sample of exact labels/components
 
 ## Source
 
-- [ARM deployment reporting tools](../../README.md#deployment-reporting-v1)
+- [ARM deployment reporting tools](../../README.md#deployments-v1)

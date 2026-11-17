@@ -5,7 +5,7 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Model Context Protocol (MCP) server for AutoRABIT ARM Developer APIs. It provides 29 dedicated tools for CI Jobs, nCino CI Jobs, deployment reporting, version control branch and pull request automation, and SIEM audit logs, plus resources and guided prompts for common workflows.
+Model Context Protocol (MCP) server for AutoRABIT ARM Developer APIs. It provides 30 dedicated tools for CI Jobs, nCino CI Jobs, deployment reporting and release label deployment, version control branch and pull request automation, and SIEM audit logs, plus resources and guided prompts for common workflows.
 
 ## Requirements
 
@@ -169,7 +169,7 @@ Trigger and monitor an nCino build:
 }
 ```
 
-### Deployment Reporting v1
+### Deployments v1
 
 | Tool | ARM endpoint |
 | --- | --- |
@@ -179,6 +179,7 @@ Trigger and monitor an nCino build:
 | `arm_get_deployment_stories` | `GET /api/deployments/v1/{label}/stories` |
 | `arm_get_deployment_promotion_log` | `GET /api/deployments/v1/{label}/logs/{iterationNumber}` |
 | `arm_get_deployment_test_coverage` | `GET /api/deployments/v1/{label}/coverage/{iterationNumber}` |
+| `arm_deploy_release_label` | `POST /api/deployments/v1/deploy` |
 
 ```json
 {
@@ -189,6 +190,21 @@ Trigger and monitor an nCino build:
     "toDate": "2026-07-31",
     "destSfOrg": "production@example.com",
     "limit": 25
+  }
+}
+```
+
+`arm_deploy_release_label` deploys an existing release label's artifact to a registered destination org and returns 202 with status `INITIATED`, the deployment label and the iteration number. Follow progress with `arm_get_deployment`. Reusing a deployment label adds a new iteration. Unless `validateOnly` is `true`, the destination org is changed. The tool does not retry automatically. Optional fields: `validateOnly`, `testLevel` (`UseSalesforceDefaults`, `NoTestRun`, `RunSpecifiedTests`, `RunLocalTests`, `RunAllTestsInOrg`, `RunTestsBasedOnChanges`, `RunRelevantTests`), `selectedTests` (required with `RunSpecifiedTests`), `skipWarnings`, `takeBackup`, `ignoreMissingVisibilitySettings`, `removeLoginIpRanges`, `removeSystemAndUserPermissions`, `skipMembers`, `skipDestructiveChanges`, `ignoreInstalledComponents` and `note`. Errors use codes `ARM-DEP-API-001` to `ARM-DEP-API-017`.
+
+```json
+{
+  "name": "arm_deploy_release_label",
+  "arguments": {
+    "releaseLabelName": "Release 26.3",
+    "destinationOrgName": "UAT",
+    "deploymentLabel": "Release 26.3 to UAT",
+    "validateOnly": true,
+    "testLevel": "RunLocalTests"
   }
 }
 ```

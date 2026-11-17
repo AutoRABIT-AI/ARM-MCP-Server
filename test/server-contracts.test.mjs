@@ -123,7 +123,7 @@ test("all dedicated tools expose and execute the published API contracts", async
 
   try {
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 30);
+    assert.equal(tools.tools.length, 31);
     assert(tools.tools.every((tool) => tool.annotations));
     assert(tools.tools.every((tool) => tool.outputSchema?.type === "object"));
 
@@ -228,6 +228,19 @@ test("all dedicated tools expose and execute the published API contracts", async
       ["arm_get_deployment_promotion_log", { label: "Release 26.3", iterationNumber: 2 }],
       ["arm_get_deployment_test_coverage", { label: "Release 26.3", iterationNumber: 2 }],
       [
+        "arm_deploy_release_label",
+        {
+          releaseLabelName: "Release 26.3",
+          destinationOrgName: "UAT",
+          deploymentLabel: "Release 26.3 to UAT",
+          validateOnly: true,
+          testLevel: "RunSpecifiedTests",
+          selectedTests: ["AccountTest", "ContactTest"],
+          takeBackup: false,
+          note: "Contract test",
+        },
+      ],
+      [
         "arm_create_branch_pr_from_manifest",
         {
           packageManifest: "<Package><types><members>*</members><name>ApexClass</name></types></Package>",
@@ -276,7 +289,7 @@ test("all dedicated tools expose and execute the published API contracts", async
     assert.deepEqual(await readFile(downloadedPath), ZIP_BYTES);
     assert.equal((await stat(downloadedPath)).mode & 0o777, 0o600);
 
-    assert.equal(requests.length, 28);
+    assert.equal(requests.length, 29);
     assert.deepEqual(
       requests.map(({ method, path }) => ({ method, path })),
       [
@@ -311,6 +324,7 @@ test("all dedicated tools expose and execute the published API contracts", async
         },
         { method: "GET", path: "/api/deployments/v1/Release%2026.3/logs/2" },
         { method: "GET", path: "/api/deployments/v1/Release%2026.3/coverage/2" },
+        { method: "POST", path: "/api/deployments/v1/deploy" },
         { method: "POST", path: "/api/vc/v1/branch-pr" },
         { method: "GET", path: "/api/vc/v1/branch-pr/req%201" },
         {
@@ -327,15 +341,25 @@ test("all dedicated tools expose and execute the published API contracts", async
     );
 
     assert.equal(requests[0].correlationId, "contract");
-    assert(requests.slice(0, 26).every((request) => request.token === "arm-test-token"));
+    assert(requests.slice(0, 27).every((request) => request.token === "arm-test-token"));
     assert(
       requests
-        .slice(26)
+        .slice(27)
         .every((request) => request.authorization === "Bearer audit-test-token"),
     );
     assert(requests.filter((request) => request.method === "GET").every((request) => !request.body));
     assert.deepEqual(requests[6].body, { projectName: "Project", title: "Release" });
     assert.deepEqual(requests[24].body, {
+      releaseLabelName: "Release 26.3",
+      destinationOrgName: "UAT",
+      deploymentLabel: "Release 26.3 to UAT",
+      validateOnly: true,
+      takeBackup: false,
+      testLevel: "RunSpecifiedTests",
+      selectedTests: ["AccountTest", "ContactTest"],
+      note: "Contract test",
+    });
+    assert.deepEqual(requests[25].body, {
       packageManifest: "<Package><types><members>*</members><name>ApexClass</name></types></Package>",
       orgName: "Dev Sandbox",
       repoName: "repo",
@@ -434,6 +458,39 @@ test("retry, validation, and generic-tool controls fail safely", async () => {
       }),
       /within 90 days/,
     );
+    const deployArgs = {
+      releaseLabelName: "Release 26.3",
+      destinationOrgName: "UAT",
+      deploymentLabel: "Release 26.3 to UAT",
+    };
+    await assert.rejects(
+      client.callTool({
+        name: "arm_deploy_release_label",
+        arguments: { ...deployArgs, testLevel: "RunEverything" },
+      }),
+      /testLevel must be one of/,
+    );
+    await assert.rejects(
+      client.callTool({
+        name: "arm_deploy_release_label",
+        arguments: { ...deployArgs, testLevel: "RunSpecifiedTests" },
+      }),
+      /selectedTests is required when testLevel is RunSpecifiedTests/,
+    );
+    await assert.rejects(
+      client.callTool({
+        name: "arm_deploy_release_label",
+        arguments: { ...deployArgs, testLevel: "RunSpecifiedTests", selectedTests: [] },
+      }),
+      /selectedTests must not be empty/,
+    );
+    await assert.rejects(
+      client.callTool({
+        name: "arm_deploy_release_label",
+        arguments: { releaseLabelName: "Release 26.3", destinationOrgName: "UAT" },
+      }),
+      /deploymentLabel must be a non-empty string/,
+    );
     await assert.rejects(
       client.callTool({
         name: "arm_list_deployments",
@@ -467,7 +524,7 @@ test("generic API access is hidden and blocked by default", async () => {
 
   try {
     const tools = await client.listTools();
-    assert.equal(tools.tools.length, 29);
+    assert.equal(tools.tools.length, 30);
     assert(!tools.tools.some((tool) => tool.name === "arm_call_api"));
     await assert.rejects(
       client.callTool({
